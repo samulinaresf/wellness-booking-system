@@ -3,15 +3,25 @@ version: "3.9"
 services:
   db:
     image: postgres:16
-    container_name: my-postgres
+    container_name: wellness-booking-container
     environment:
-      POSTGRES_USER: admin
+      POSTGRES_USER: samliverse_5454
       POSTGRES_PASSWORD: Kukesisw4_5454
       POSTGRES_DB: wellness_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
+  backend:
+    build: ./backend
+    container_name: wellness-backend
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://samliverse_5454:Kukesisw4_5454@db:5432/wellness_db
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
 volumes:
   postgres_data:
