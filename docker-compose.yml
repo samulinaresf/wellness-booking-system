@@ -18,7 +18,7 @@ services:
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgresql://samliverse_5454:Kukesisw4_5454@db:5432/wellness_db
+      DATABASE_URL: ${DATABASE_URL}
     ports:
       - "8000:8000"
     volumes:
