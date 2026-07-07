@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from sqlmodel import SQLModel, Session, select
 
 from db.db import engine
-from db.models import User, Booking, Audit_log, Time_slot
+from admin.auditlog import get_audit_log
+from db.models import User, Booking, Time_slot
 
 app = FastAPI()
 SQLModel.metadata.create_all(engine)
@@ -24,10 +25,8 @@ def get_bookings():
         return bookings
 
 @app.get("/audit-log")
-def get_auditlog():
-    with Session(engine) as session:
-        auditlog = session.exec(select(Audit_log)).all()
-        return auditlog
+def get_all_audit_logs():
+    return get_audit_log()
 
 @app.get("/time-slots")
 def get_timeslots():
