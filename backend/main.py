@@ -2,10 +2,14 @@ from fastapi import FastAPI
 from sqlmodel import SQLModel, Session, select
 
 from db.db import engine
-from admin.auditlog import get_audit_log
+from admin.auditlog import get_audit_log, register_metadata_in_audit_log
 from db.models import User, Booking, Time_slot
+from users.routes import router as users_router
+
 
 app = FastAPI()
+app.include_router(users_router)
+
 SQLModel.metadata.create_all(engine)
 
 @app.get("/")
