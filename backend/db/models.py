@@ -47,8 +47,4 @@ class Audit_log(SQLModel, table=True):
     user_id: int | None = Field(default=None, foreign_key="user.user_id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     metadata_details: str | None = None
-
-
-
-
     
