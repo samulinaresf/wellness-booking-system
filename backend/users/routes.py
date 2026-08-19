@@ -1,14 +1,14 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
-
 import jwt
+from sqlmodel import select, Session
 from fastapi import Depends, HTTPException, status, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
 from pydantic import BaseModel
 import os
-from db.models import User_role
+from db.models import User as UserDB, User_role
 
 # to get a string like this run:
 # openssl rand -hex 32
@@ -24,16 +24,6 @@ router = APIRouter(
     tags=["usuarios"]
 )
 
-fake_users_db = {
-    "johndoe@example.com": {
-        "name": "John Doe",
-        "email": "johndoe@example.com",
-        "role": User_role.USER,
-        "hashed_password": "$argon2id$v=19$m=65536,t=3,p=4$wagCPXjifgvUFBzq4hqe3w$CYaIb8sB+wtD+Vu/P4uod1+Qof8h+1g7bbDlBID48Rc",
-        "disabled": False,
-    }
-}
-
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -42,14 +32,11 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: str 
     
-class User(BaseModel):
+class UserResponse(BaseModel):
     name: str
     email: str
     role: User_role
-    disabled: bool = False
-
-class UserInDB(User):
-    hashed_password: str
+    is_active: bool
 
 
 password_hash = PasswordHash.recommended()
@@ -67,18 +54,19 @@ def get_password_hash(password):
     return password_hash.hash(password)
 
 
-def get_user(db, email: str):
-    if email in db:
-        email_dict = db[email]
-        return UserInDB(**email_dict)
+def get_user(db: Session, 
+             email: str):
+    statement = db.exec(select(UserDB).where(UserDB.email == email)).first()
+    
+    return statement
 
 
-def authenticate_user(fake_db, email: str, password: str):
-    user = get_user(fake_db, email)
+def authenticate_user(db: Session, email: str, password: str):
+    user = get_user(db, email)
     if not user:
         verify_password(password, DUMMY_HASH)
         return None
-    if not verify_password(password, user.hashed_password):
+    if not verify_password(password, user.password_hash):
         return None
     return user
 
@@ -108,16 +96,16 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         token_data = TokenData(email=email)
     except InvalidTokenError:
         raise credentials_exception
-    user = get_user(fake_users_db, email=token_data.email)
+    user = get_user(db=Depends(get_current_user), email=token_data.email)
     if user is None:
         raise credentials_exception
     return user
 
 
 async def get_current_active_user(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[UserDB, Depends(get_current_user)],
 ):
-    if current_user.disabled:
+    if not current_user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     return current_user
 
@@ -128,7 +116,7 @@ async def login_for_access_token(
 ) -> Token:
     email = form_data.username
 
-    user = authenticate_user(fake_users_db, email, form_data.password)
+    user = authenticate_user(db, email, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -142,15 +130,15 @@ async def login_for_access_token(
     return Token(access_token=access_token, token_type="bearer")
 
 
-@router.get("/me/", response_model=User)
+@router.get("/me/", response_model=UserDB)
 async def read_users_me(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-) -> User:
+    current_user: Annotated[UserDB, Depends(get_current_active_user)],
+) -> UserDB:
     return current_user
 
 
 @router.get("/me/items/") 
 async def read_own_items(
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    current_user: Annotated[UserDB, Depends(get_current_active_user)],
 ):
     return [{"item_id": "Foo", "owner": current_user.email}]
