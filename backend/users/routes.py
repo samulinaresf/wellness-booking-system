@@ -9,6 +9,7 @@ from pwdlib import PasswordHash
 from pydantic import BaseModel
 import os
 from db.models import User as UserDB, User_role
+from db.db import get_session
 
 # to get a string like this run:
 # openssl rand -hex 32
@@ -56,9 +57,9 @@ def get_password_hash(password):
 
 def get_user(db: Session, 
              email: str):
-    statement = db.exec(select(UserDB).where(UserDB.email == email)).first()
+    user = db.exec(select(UserDB).where(UserDB.email == email)).first()
     
-    return statement
+    return user
 
 
 def authenticate_user(db: Session, email: str, password: str):
@@ -82,7 +83,8 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return encoded_jwt
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)],
+                           db: Annotated[Session, Depends(get_session)]):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No podemos validar las credenciales",
@@ -96,7 +98,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         token_data = TokenData(email=email)
     except InvalidTokenError:
         raise credentials_exception
-    user = get_user(db=Depends(get_current_user), email=token_data.email)
+    user = get_user(db=db, email=token_data.email)
     if user is None:
         raise credentials_exception
     return user
@@ -113,6 +115,7 @@ async def get_current_active_user(
 @router.post("/token", response_model=Token) 
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Annotated[Session, Depends(get_session)]
 ) -> Token:
     email = form_data.username
 
@@ -130,10 +133,10 @@ async def login_for_access_token(
     return Token(access_token=access_token, token_type="bearer")
 
 
-@router.get("/me/", response_model=UserDB)
+@router.get("/me/", response_model=UserResponse)
 async def read_users_me(
     current_user: Annotated[UserDB, Depends(get_current_active_user)],
-) -> UserDB:
+) -> UserResponse:
     return current_user
 
 
