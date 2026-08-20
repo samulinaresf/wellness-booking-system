@@ -1,5 +1,6 @@
 Documentación técnica
-    Las clases en FastAPI se escribirán en base a la sintaxis por convención de python que es snake case en el nombre de las variables y nombres en singular.
+
+Las clases en FastAPI se escribirán en base a la sintaxis por convención de python que es snake case en el nombre de las variables y nombres en singular.
 
 La primera clase es User que hará referencia a los usuarios de la plataforma. Es una clase generalista que recibirá todos los registros de usuarios ya sean clientes, profesionales o desarrolladores. 
 

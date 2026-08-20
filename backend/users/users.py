@@ -1,8 +1,11 @@
 from db.models import User, User_role
 from sqlmodel import Session, select
+from fastapi import Depends, HTTPException, status
 from datetime import datetime
 from admin.auditlog import register_metadata_in_audit_log
 from pwdlib import PasswordHash
+from typing import Annotated
+from security import UserDB, get_current_active_user
 
 def create_user(db:Session,
                 name: str,
@@ -33,6 +36,7 @@ def read_user_by_id(db: Session,
                     user_id: int):
     
     user = db.get(User, user_id)
+    
     return user
 
 def update_user_profile_by_id(db: Session,
@@ -170,9 +174,21 @@ def deactivate_user_by_id(db: Session,
     db.refresh(user)
     
     register_metadata_in_audit_log(db=db,
-                                        booking_id=None,
-                                        user_id=user.user_id,
-                                        metadata_details=f"Usuario {user.user_id} ({user.email}) desactivado.")
+                                   booking_id=None,
+                                   user_id=user.user_id,
+                                   metadata_details=f"Usuario {user.user_id} ({user.email}) desactivado.")
         
     
     return user
+
+def require_admin(current_user: Annotated[UserDB, Depends(get_current_active_user)]):
+    
+    if current_user.role not in [User_role.ADMIN, User_role.SUPERADMIN]:
+        raise HTTPException(status_code=403)
+    return current_user
+    
+def require_superadmin(current_user: Annotated[UserDB, Depends(get_current_active_user)]):
+    
+    if current_user.role != User_role.SUPERADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    return current_user
