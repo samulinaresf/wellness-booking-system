@@ -181,6 +181,26 @@ def deactivate_user_by_id(db: Session,
     
     return user
 
+def activate_user_by_id(db: Session,
+                          user_id: int):
+    user = db.get(User, user_id)
+        
+    if user is None:
+        return None
+        
+    user.is_active = True
+    user.updated_at = datetime.now()
+    db.commit()
+    db.refresh(user)
+    
+    register_metadata_in_audit_log(db=db,
+                                   booking_id=None,
+                                   user_id=user.user_id,
+                                   metadata_details=f"Usuario {user.user_id} ({user.email}) activado.")
+        
+    
+    return user
+
 def require_admin(current_user: Annotated[UserDB, Depends(get_current_active_user)]):
     
     if current_user.role not in [User_role.ADMIN, User_role.SUPERADMIN]:

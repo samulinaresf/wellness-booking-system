@@ -10,3 +10,6 @@ class AuditLogResponse(BaseModel):
     
 class UserEoleUpdate(BaseModel):
     role: User_role | None = None
+    
+class UserStatusUpdate(BaseModel):
+    is_active: bool
