@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 from sqlmodel import Field, SQLModel
 from enum import Enum
+from decimal import Decimal
 
 class User_role(str, Enum):
     USER = "user"
@@ -33,13 +34,13 @@ class Time_slot(SQLModel, table=True):
     end_at: datetime = Field(default_factory=datetime.utcnow)
     capacity: int
     status: Time_slot_status = Field(default=Time_slot_status.AVAILABLE)
+    price: Decimal = Field(max_digits=10, decimal_places=2)
 
 class Booking(SQLModel, table=True):
     booking_id: int | None = Field(default=None, primary_key=True)
     time_slot_id: int | None = Field(default=None, foreign_key="time_slot.time_slot_id")
     prof_user_id: int | None = Field(default=None, foreign_key="user.user_id")
     user_id: int | None = Field(default=None, foreign_key="user.user_id")
-    price: float
     
 class Audit_log(SQLModel, table=True):
     audit_log_id: int | None = Field(default=None, primary_key=True)

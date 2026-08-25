@@ -8,7 +8,7 @@ class AuditLogResponse(BaseModel):
     created_at: datetime
     metadata_details: str | None
     
-class UserEoleUpdate(BaseModel):
+class UserRoleUpdate(BaseModel):
     role: User_role | None = None
     
 class UserStatusUpdate(BaseModel):
