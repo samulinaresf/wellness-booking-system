@@ -1,3 +1,5 @@
+#Este es el bookings.py
+
 from db.models import User, Time_slot, Time_slot_status, Booking
 from sqlmodel import Session, select
 from datetime import datetime
@@ -50,8 +52,20 @@ def update_time_slot(db: Session,
     if status is not None:
         time_slot.status = status
     
-    if price is not None:
-            time_slot.price = price
+    if price is not None and price != time_slot.price:
+
+        existing_booking = db.exec(
+            select(Booking).where(
+                Booking.time_slot_id == time_slot_id
+            )
+        ).first()
+
+        if existing_booking is not None:
+            raise ValueError(
+                "No se puede modificar el precio de un horario con reservas"
+            )
+
+        time_slot.price = price
     
     db.add(time_slot)
     db.commit()
@@ -79,6 +93,17 @@ def delete_time_slot(db: Session,
     
     if time_slot is None:
         return None
+    
+    existing_booking = db.exec(
+        select(Booking).where(
+            Booking.time_slot_id == time_slot_id
+        )
+    ).first()
+
+    if existing_booking is not None:
+        raise ValueError(
+            "No se puede eliminar un horario que tiene reservas"
+        )
     
     register_metadata_in_audit_log(db=db,
                                    booking_id=None,
@@ -112,9 +137,32 @@ def create_booking(db: Session,
     if time_slot.status != Time_slot_status.AVAILABLE:
         return None
     
+    total_bookings_per_time_slot = db.exec(select(Booking).where(Booking.time_slot_id == time_slot_id)).all()
+    
+    if len(total_bookings_per_time_slot) >= time_slot.capacity:
+        time_slot.status = Time_slot_status.UNAVAILABLE
+        db.add(time_slot)
+        db.commit()
+        return None
+    
+    existing_booking = db.exec(
+        select(Booking).where(
+            Booking.time_slot_id == time_slot_id,
+            Booking.user_id == user_id
+        )
+    ).first()
+
+    if existing_booking is not None:
+        return None
+    
     booking = Booking(time_slot_id=time_slot.time_slot_id, prof_user_id=professional.user_id, user_id=user.user_id)
     
     db.add(booking)
+    
+    if len(total_bookings_per_time_slot) + 1 >= time_slot.capacity:
+        time_slot.status = Time_slot_status.UNAVAILABLE
+        db.add(time_slot)
+    
     db.commit()
     db.refresh(booking)
     
@@ -153,28 +201,58 @@ def read_bookings_by_professional(
 
 def update_booking(db: Session,
                    booking_id: int,
-                   user_id: int | None=None,
-                   time_slot_id: int | None=None,
+                   time_slot_id: int,
                    ):
     
     booking = db.get(Booking, booking_id)
         
     if booking is None:
         return None
+    
+    old_time_slot = db.get(Time_slot, booking.time_slot_id)
+    
+    if booking.time_slot_id == time_slot_id:
+        return booking
             
-    if user_id is not None:
-        booking.user_id = user_id
-            
-    if time_slot_id is not None:
-        new_time_slot = db.get(Time_slot, time_slot_id)
+    new_time_slot = db.get(Time_slot, time_slot_id)
 
-        if new_time_slot is None:
-            return None
+    if new_time_slot is None:
+        return None
+    
+    if new_time_slot.status != Time_slot_status.AVAILABLE:
+        return None
 
-        booking.time_slot_id = new_time_slot.time_slot_id
-        booking.prof_user_id = new_time_slot.prof_user_id
+    existing_booking = db.exec(
+        select(Booking).where(
+            Booking.time_slot_id == new_time_slot.time_slot_id,
+            Booking.user_id == booking.user_id
+        )
+    ).first()
+    
+    if existing_booking is not None:
+        return None
+    
+    new_slot_bookings = db.exec(
+            select(Booking).where(
+                Booking.time_slot_id == new_time_slot.time_slot_id,
+            )
+        ).all()
+
+    if len(new_slot_bookings) >= new_time_slot.capacity:
+        return None
+    
+    if old_time_slot is not None:
+        old_time_slot.status = Time_slot_status.AVAILABLE
+        db.add(old_time_slot)
+        
+    booking.time_slot_id = new_time_slot.time_slot_id
+    booking.prof_user_id = new_time_slot.prof_user_id
+    
+    if len(new_slot_bookings) + 1 >= new_time_slot.capacity:
+        new_time_slot.status = Time_slot_status.UNAVAILABLE
         
     db.add(booking)
+    db.add(new_time_slot)
     db.commit()
     db.refresh(booking)
             
@@ -191,10 +269,18 @@ def delete_booking(db: Session,
     
     booking = db.get(Booking, booking_id)
     
-    
     if booking is None:
         return None
     
+    time_slot = db.get(
+        Time_slot,
+        booking.time_slot_id
+    )
+
+    if time_slot is not None:
+        time_slot.status = Time_slot_status.AVAILABLE
+        db.add(time_slot)
+        
     register_metadata_in_audit_log(db=db,
                                    booking_id=booking_id,
                                    user_id=actor_user_id,

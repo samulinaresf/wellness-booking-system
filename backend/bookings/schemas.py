@@ -4,6 +4,7 @@ from db.models import Time_slot_status
 from decimal import Decimal
 
 class TimeSlotSchema(BaseModel):
+    time_slot_id: int
     prof_user_id: int
     start_at: datetime
     end_at: datetime 
@@ -12,6 +13,7 @@ class TimeSlotSchema(BaseModel):
     price: Decimal
 
 class BookingSchema(BaseModel):
+    booking_id: int
     time_slot_id: int
     prof_user_id: int
     user_id: int

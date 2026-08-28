@@ -51,7 +51,7 @@ async def login_for_access_token(
     )
 
 @router.post("/", response_model=UserResponse)
-async def create_user_in_db(
+async def create_user_route(
     user_data: UserCreate,
     db: Annotated[Session, Depends(get_session)],
 ) -> UserResponse:
@@ -68,7 +68,7 @@ async def create_user_in_db(
     return user
 
 @router.patch("/mi-cuenta", response_model=UserResponse)
-async def update_user_profile(db: Annotated[Session, Depends(get_session)],
+async def update_user_profile_by_id_route(db: Annotated[Session, Depends(get_session)],
                               user_data: UserUpdate,
                               current_user: Annotated[UserDB, Depends(get_current_active_user)],
 
@@ -86,7 +86,7 @@ async def update_user_profile(db: Annotated[Session, Depends(get_session)],
     return user
 
 @router.patch("/mi-cuenta/cambiar-contrasena", response_model=MessageResponse)
-async def change_profile_password(db: Annotated[Session, Depends(get_session)],
+async def change_user_password_route(db: Annotated[Session, Depends(get_session)],
                                   user_data: ChangePassword,
                                   current_user: Annotated[UserDB, Depends(get_current_active_user)],
 

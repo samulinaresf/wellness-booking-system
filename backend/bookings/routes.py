@@ -1,17 +1,12 @@
 from typing import Annotated
-from db.models import User as UserDB, Time_slot_status, Time_slot, Booking
-from users.security import get_current_active_user, authenticate_user, create_access_token, get_password_hash
-from schemas import UserResponse, Token, UserCreate
-from fastapi.security import OAuth2PasswordRequestForm
+from db.models import User as UserDB, Time_slot, Booking
+from users.security import get_current_active_user
 from sqlmodel import Session
 from fastapi import Depends, APIRouter, HTTPException, status
 from db.db import get_session
-from users.users import read_user_by_id, require_admin, read_users, update_user_profile_by_id, change_user_password, change_user_role, delete_user_by_id, deactivate_user_by_id, activate_user_by_id
-from schemas import TimeSlotSchema, BookingSchema, TimeSlotCreate, BookingCreate
-from users.schemas import UserResponse
-from bookings.bookings import create_time_slot, update_time_slot, read_time_slots, delete_time_slot, create_booking, read_bookings, update_booking, get_booking_by_id, delete_booking, read_bookings_by_professional
-from datetime import datetime
-from decimal import Decimal
+from users.users import require_admin
+from schemas import TimeSlotSchema, BookingSchema, TimeSlotCreate, BookingCreate, TimeSlotUpdate
+from bookings.bookings import create_time_slot, update_time_slot, read_time_slots, delete_time_slot, create_booking, update_booking, get_booking_by_id, delete_booking, read_bookings_by_professional
 
 router = APIRouter(
     prefix="/servicios",
@@ -19,7 +14,7 @@ router = APIRouter(
 )
 
 @router.get("/horarios", response_model=list[TimeSlotSchema])
-async def read_time_slots_from_db(db: Annotated[Session, Depends(get_session)],
+async def read_time_slots_route(db: Annotated[Session, Depends(get_session)],
                                    
 ) -> list[TimeSlotSchema]:
     
@@ -28,7 +23,7 @@ async def read_time_slots_from_db(db: Annotated[Session, Depends(get_session)],
     return slot
 
 @router.get("/reservas", response_model=list[BookingSchema])
-async def read_bookings_by_prof(db: Annotated[Session, Depends(get_session)],
+async def read_bookings_by_professional_route(db: Annotated[Session, Depends(get_session)],
                                 current_user: Annotated[UserDB, Depends(require_admin)],
                                    
 ) -> list[BookingSchema]:
@@ -39,7 +34,7 @@ async def read_bookings_by_prof(db: Annotated[Session, Depends(get_session)],
     return booking
 
 @router.get("/reservas/{booking_id}", response_model=BookingSchema)
-async def read_booking_by_id(db: Annotated[Session, Depends(get_session)],
+async def get_booking_by_id_route(db: Annotated[Session, Depends(get_session)],
                                 booking_id: int,
                                 current_user: Annotated[UserDB, Depends(require_admin)],                                   
 ) -> BookingSchema:
@@ -62,7 +57,7 @@ async def read_booking_by_id(db: Annotated[Session, Depends(get_session)],
     return booking
 
 @router.post("/horarios/nuevo-horario", response_model=TimeSlotSchema)
-async def create_new_time_slot(db: Annotated[Session, Depends(get_session)],
+async def create_time_slot_route(db: Annotated[Session, Depends(get_session)],
                                slot_data: TimeSlotCreate,
                                current_user: Annotated[UserDB, Depends(require_admin)], 
                                                   
@@ -79,7 +74,7 @@ async def create_new_time_slot(db: Annotated[Session, Depends(get_session)],
     return slot
 
 @router.post("/reservas/nueva-reserva", response_model=BookingSchema)
-async def create_new_booking(db: Annotated[Session, Depends(get_session)],
+async def create_booking_route(db: Annotated[Session, Depends(get_session)],
                              booking_data: BookingCreate,
                              current_user: Annotated[UserDB, Depends(get_current_active_user)], 
                                   
@@ -97,12 +92,18 @@ async def create_new_booking(db: Annotated[Session, Depends(get_session)],
                              user_id=current_user.user_id,
                              time_slot_id=time_slot.time_slot_id)
     
+    if booking is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No se puede realizar la reserva"
+        )
+    
     return booking
 
 @router.patch("/horarios/{time_slot_id}/actualizar-horario", response_model=TimeSlotSchema)
-async def update_time_slot_at_db(db: Annotated[Session, Depends(get_session)],
+async def update_time_slot_route(db: Annotated[Session, Depends(get_session)],
                                  time_slot_id: int,
-                                 slot_data: TimeSlotCreate,
+                                 slot_data: TimeSlotUpdate,
                                  current_user: Annotated[UserDB, Depends(require_admin)], 
                                                   
 ) -> TimeSlotSchema:
@@ -121,18 +122,26 @@ async def update_time_slot_at_db(db: Annotated[Session, Depends(get_session)],
             detail="No tienes permisos para modificar este horario"
         )
     
-    slot = update_time_slot(db=db,
+    
+    try: 
+    
+        return update_time_slot(db=db,
                             time_slot_id=time_slot_id,
                             start_at=slot_data.start_at,
                             end_at=slot_data.end_at,
                             capacity=slot_data.capacity,
                             status=slot_data.status,
                             price=slot_data.price)
+
+    except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e)
+            )
     
-    return slot
 
 @router.patch("/reservas/{booking_id}/actualizar-reserva", response_model=BookingSchema)
-async def update_booking_at_db(db: Annotated[Session, Depends(get_session)],
+async def update_booking_route(db: Annotated[Session, Depends(get_session)],
                                booking_id: int,
                                booking_data: BookingCreate,
                                current_user: Annotated[UserDB, Depends(get_current_active_user)], 
@@ -168,10 +177,16 @@ async def update_booking_at_db(db: Annotated[Session, Depends(get_session)],
                              time_slot_id=booking_data.time_slot_id,
                              booking_id=booking_id)
     
+    if booking is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No se puede cambiar la reserva al horario seleccionado"
+        )
+        
     return booking
 
 @router.delete("/horarios/{time_slot_id}", response_model=TimeSlotSchema)
-async def delete_time_slot_at_db(db: Annotated[Session, Depends(get_session)],
+async def delete_time_slot_route(db: Annotated[Session, Depends(get_session)],
                            current_user: Annotated[UserDB, Depends(require_admin)], 
                            time_slot_id: int
                                                   
@@ -190,14 +205,21 @@ async def delete_time_slot_at_db(db: Annotated[Session, Depends(get_session)],
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permisos para eliminar este horario"
         )
-    
-    return delete_time_slot(db=db,
-                            user_id=current_user.user_id, 
-                            time_slot_id=time_slot_id)
+    try: 
+        return delete_time_slot(db=db,
+                                user_id=current_user.user_id, 
+                                time_slot_id=time_slot_id)
+        
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e)
+        )
     
 
 @router.delete("/reservas/{booking_id}", response_model=BookingSchema)
-async def delete_booking_at_db(db: Annotated[Session, Depends(get_session)],
+async def delete_booking_route(db: Annotated[Session, Depends(get_session)],
                              current_user: Annotated[UserDB, Depends(get_current_active_user)], 
                              booking_id: int
                                   
