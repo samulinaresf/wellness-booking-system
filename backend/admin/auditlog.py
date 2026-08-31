@@ -17,9 +17,8 @@ def register_metadata_in_audit_log(db:Session,
     return auditlog
 
 #Mostrar todos los registros de auditlog
-def get_audit_log():
-    with Session(engine) as session:
-        auditlog = session.exec(select(Audit_log)).all()
-        return auditlog
+def get_audit_log(db: Session):
+    auditlog = db.exec(select(Audit_log)).all()
+    return auditlog
     
     

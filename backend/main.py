@@ -1,39 +1,31 @@
 from fastapi import FastAPI
-from sqlmodel import SQLModel, Session, select
+from sqlmodel import SQLModel
 
 from db.db import engine
-from admin.auditlog import get_audit_log, register_metadata_in_audit_log
-from db.models import User, Booking, Time_slot
+
 from users.routes import router as users_router
+from bookings.routes import router as bookings_router
+from admin.routes import router as admin_router
 
 
-app = FastAPI()
+app = FastAPI(
+    title="Wellness Booking System",
+    description="API para la gestión de usuarios, horarios y reservas.",
+    version="1.0.0"
+)
+
+
+# Routers
 app.include_router(users_router)
+app.include_router(bookings_router)
+app.include_router(admin_router)
 
+
+# Crear tablas
 SQLModel.metadata.create_all(engine)
 
+
+# Health check
 @app.get("/")
 def root():
     return {"message": "FastAPI funcionando"}
-
-@app.get("/users")
-def get_users():
-    with Session(engine) as session:
-        users = session.exec(select(User)).all()
-        return users
-    
-@app.get("/bookings")
-def get_bookings():
-    with Session(engine) as session:
-        bookings = session.exec(select(Booking)).all()
-        return bookings
-
-@app.get("/audit-log")
-def get_all_audit_logs():
-    return get_audit_log()
-
-@app.get("/time-slots")
-def get_timeslots():
-    with Session(engine) as session:
-        timeslots = session.exec(select(Time_slot)).all()
-        return timeslots

@@ -7,3 +7,5 @@ pyjwt
 pydantic
 pwdlib[argon2]
 python-multipart
+httpx
+pytest
