@@ -44,8 +44,8 @@ class Booking(SQLModel, table=True):
     
 class Audit_log(SQLModel, table=True):
     audit_log_id: int | None = Field(default=None, primary_key=True)
-    booking_id: int | None = Field(default=None, foreign_key="booking.booking_id")
-    user_id: int | None = Field(default=None, foreign_key="user.user_id")
+    booking_id: int | None = Field(default=None, foreign_key="booking.booking_id", ondelete="SET NULL")
+    user_id: int | None = Field(default=None, foreign_key="user.user_id", ondelete="SET NULL")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     metadata_details: str | None = None
     

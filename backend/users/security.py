@@ -9,7 +9,7 @@ from pwdlib import PasswordHash
 import os
 from db.models import User as UserDB
 from db.db import get_session
-from schemas import TokenData
+from users.schemas import TokenData
 
 # to get a string like this run:
 # openssl rand -hex 32

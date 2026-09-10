@@ -5,7 +5,7 @@ from datetime import datetime
 from admin.auditlog import register_metadata_in_audit_log
 from pwdlib import PasswordHash
 from typing import Annotated
-from security import UserDB, get_current_active_user
+from users.security import UserDB, get_current_active_user
 
 def create_user(db:Session,
                 name: str,
