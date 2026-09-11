@@ -36,7 +36,7 @@ def update_time_slot(db: Session,
                      price: Decimal | None = None):
     
     time_slot = db.get(Time_slot, time_slot_id)
-    
+        
     if time_slot is None:
         return None
     
@@ -47,9 +47,23 @@ def update_time_slot(db: Session,
         time_slot.end_at = end_at
     
     if capacity is not None:
-        time_slot.capacity = capacity
-    
-    if status is not None:
+        existing_bookings = db.exec(
+            select(Booking).where(
+                Booking.time_slot_id == time_slot_id
+            )
+        ).all()        
+        if capacity < len(existing_bookings):
+            raise ValueError("No se puede modificar capacidad por debajo del número de reservas.")
+        else:
+            time_slot.capacity = capacity
+        if capacity == len(existing_bookings):
+            time_slot.status = Time_slot_status.UNAVAILABLE
+        elif capacity > len(existing_bookings):
+            time_slot.status = Time_slot_status.AVAILABLE
+        else:
+            raise ValueError
+            
+    elif status is not None:
         time_slot.status = status
     
     if price is not None and price != time_slot.price:
@@ -135,7 +149,7 @@ def create_booking(db: Session,
         return None
     
     if time_slot.status != Time_slot_status.AVAILABLE:
-        return None
+        raise ValueError("Este horario no está disponible.")
     
     total_bookings_per_time_slot = db.exec(select(Booking).where(Booking.time_slot_id == time_slot_id)).all()
     
