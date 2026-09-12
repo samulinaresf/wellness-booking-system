@@ -3,7 +3,7 @@ from users.users import create_user
 from conftest import test_session
 from datetime import datetime
 from db.models import Time_slot_status, User_role
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from users.security import UserDB, get_current_active_user
 import pytest
 
@@ -23,6 +23,18 @@ def test_create_time_slot(test_session):
     assert result.capacity == 3
     assert result.status == Time_slot_status.AVAILABLE
     assert result.price == Decimal("19.65")
+    
+    with pytest.raises(
+            ValueError,
+            match='El precio no puede ser inferior a cero.'
+        ):
+        (create_time_slot(test_session,1,start_at=start_at,end_at=end_at,capacity=capacity,status=time_slot_status,price=Decimal("-19.50")))
+    with pytest.raises(
+                ValueError,
+                match="La capacidad no puede ser negativa."
+            ):
+            (create_time_slot(test_session,1,start_at=start_at,end_at=end_at,capacity=-3,status=time_slot_status,price=price))
+    
 
 def test_update_time_slot(test_session):
     
@@ -232,7 +244,7 @@ def test_delete_booking(test_session):
     
     time_slot_1_start_at = datetime(2026, 9, 1, 10, 0)
     time_slot_1_end_at = datetime(2026, 9, 1, 11, 0)
-    time_slot_1_capacity = 3
+    time_slot_1_capacity = 1
     time_slot_1_time_slot_status = Time_slot_status.AVAILABLE
     time_slot_1_price = Decimal("19.65")
     
@@ -250,6 +262,7 @@ def test_delete_booking(test_session):
     booking_1 = create_booking(test_session,time_slot_id=time_slot_1.time_slot_id,user_id=time_slot_1.prof_user_id)
     booking_2 = create_booking(test_session,time_slot_id=time_slot_2.time_slot_id,user_id=time_slot_2.prof_user_id)
 
+    assert time_slot_1.status == Time_slot_status.UNAVAILABLE
     
     deleted_result = delete_booking(test_session, booking_1.booking_id, booking_1.user_id)
     
@@ -260,6 +273,8 @@ def test_delete_booking(test_session):
                    for booking in result)
     assert any(booking.booking_id == booking_2.booking_id
                for booking in result)
+    
+    assert time_slot_1.status == Time_slot_status.AVAILABLE
 
 def test_create_booking_duplicated_user(test_session):
     
@@ -439,57 +454,151 @@ def test_change_fake_status(test_session):
         ):
         
         update_time_slot(
-            test_session,
-            time_slot_1.time_slot_id,
-            time_slot_1.start_at,
-            time_slot_1.end_at,
-            time_slot_1.capacity,
-            Time_slot_status.AVAILABLE,
-            time_slot_1.price
-        )
-    
+        test_session,
+        time_slot_id=time_slot_1.time_slot_id,
+        status=Time_slot_status.AVAILABLE
+    )
+        
     test_session.refresh(time_slot_1)
 
-    """
-    Yo cubriría estas comprobaciones:
+def test_change_booking_same_slot(test_session):
+    time_slot_start_at = datetime(2026, 9, 1, 10, 0)
+    time_slot_end_at = datetime(2026, 9, 1, 11, 0)
+    time_slot_capacity = 2
+    time_slot_time_slot_status = Time_slot_status.AVAILABLE
+    time_slot_price = Decimal("19.65")
     
-- Marcar manualmente como AVAILABLE un slot lleno
-    --Debe rechazarse.
-- Mover una reserva al mismo slot
-    --update_booking() debería dejarla como está.
-    --No crear duplicados ni tocar estados innecesariamente.
-- Mover una reserva a un slot inexistente
-    --Debe rechazarse.
-    --La reserva original debe seguir apuntando al slot antiguo.
-- Mover una reserva a un slot UNAVAILABLE
-    --Debe rechazarse.
-La reserva debe conservar su time_slot_id original.
-Mover una reserva a un slot lleno
-Aunque el estado estuviera mal marcado como AVAILABLE, la comprobación de capacidad debería impedirlo.
-Mover una reserva y llenar el slot destino
-Si el slot destino tenía una plaza libre, después del movimiento debe pasar a UNAVAILABLE.
-Mover una reserva y liberar el slot origen
-Si el origen estaba lleno, al sacar una reserva debería volver a AVAILABLE.
-Eliminar una reserva y reabrir el slot
-Este ya te conviene reforzarlo: no solo comprobar que desaparece la reserva, sino también: assert time_slot.status == Time_slot_status.AVAILABLE
-Eliminar una reserva inexistente
-Debe devolver None.
-Y no debe modificar otras reservas.
-Eliminar una reserva de un slot con más de una reserva
-Si capacidad = 3 y había 2 reservas, al borrar una sigue AVAILABLE.
-Aquí compruebas que no haces algo raro con el status.
-Profesional inexistente en create_booking
-Si el time_slot.prof_user_id apunta a algo inválido, la reserva debe rechazarse.
-No debería ocurrir normalmente con una FK bien montada, pero protege la función.
-Fechas inválidas del slot
-end_at <= start_at.
-Esto puede estar mejor en Pydantic/schema, pero en algún nivel tienes que testearlo.
-Capacidad inválida
-capacity = 0
-capacity = -1
-Debe rechazarse.
-Precio inválido
-Precio negativo.
-Esto también puede ir mejor en schema/Pydantic, pero debe existir una prueba en alguna capa.
+    time_slot_2_start_at = datetime(2026, 10, 1, 12, 0)
+    time_slot_2_end_at = datetime(2026, 10, 1, 13, 0)
+   
 
-    """
+    time_slot_1 = create_time_slot(test_session,1,start_at=time_slot_start_at,end_at=time_slot_end_at,capacity=time_slot_capacity,status=time_slot_time_slot_status,price=time_slot_price)        
+
+    juan = create_user(test_session,name="Juan",email="juan@example.com",password_hash="ejemplo",phone_number="12345",role=User_role.USER, profile_pic=None, bio=None)
+    
+    booking_1 = create_booking(test_session,time_slot_id=time_slot_1.time_slot_id,user_id=juan.user_id)
+    
+    assert booking_1.time_slot_id == time_slot_1.time_slot_id
+        
+    booking_1_updated = update_booking(
+        test_session,
+        booking_id=booking_1.booking_id,
+        time_slot_id=time_slot_1.time_slot_id
+
+    )
+        
+    test_session.refresh(booking_1_updated)
+    
+    assert booking_1_updated.time_slot_id == time_slot_1.time_slot_id
+    assert booking_1_updated.time_slot_id == booking_1.time_slot_id
+    assert booking_1_updated.booking_id == booking_1.booking_id
+    
+def test_change_booking_fake_slot(test_session):
+    time_slot_start_at = datetime(2026, 9, 1, 10, 0)
+    time_slot_end_at = datetime(2026, 9, 1, 11, 0)
+    time_slot_capacity = 2
+    time_slot_time_slot_status = Time_slot_status.AVAILABLE
+    time_slot_price = Decimal("19.65")
+   
+
+    time_slot_1 = create_time_slot(test_session,1,start_at=time_slot_start_at,end_at=time_slot_end_at,capacity=time_slot_capacity,status=time_slot_time_slot_status,price=time_slot_price)        
+
+    juan = create_user(test_session,name="Juan",email="juan@example.com",password_hash="ejemplo",phone_number="12345",role=User_role.USER, profile_pic=None, bio=None)
+    
+    booking_1 = create_booking(test_session,time_slot_id=time_slot_1.time_slot_id,user_id=juan.user_id)
+    
+    with pytest.raises(
+                ValueError,
+                match="ID del slot inexistente."
+            ):
+        
+        (update_booking(
+            test_session,
+            booking_id=booking_1.booking_id,
+            time_slot_id=3000
+
+        ))
+        
+    test_session.refresh(booking_1)
+    
+    assert booking_1.time_slot_id == time_slot_1.time_slot_id
+
+def test_change_slot_to_unavailable_slot(test_session):
+    time_slot_start_at = datetime(2026, 9, 1, 10, 0)
+    time_slot_end_at = datetime(2026, 9, 1, 11, 0)
+    time_slot_capacity = 1
+    time_slot_time_slot_status = Time_slot_status.AVAILABLE
+    time_slot_price = Decimal("19.65")
+       
+    
+    time_slot_1 = create_time_slot(test_session,1,start_at=time_slot_start_at,end_at=time_slot_end_at,capacity=time_slot_capacity,status=time_slot_time_slot_status,price=time_slot_price)        
+    time_slot_2 = create_time_slot(test_session,1,start_at=time_slot_start_at,end_at=time_slot_end_at,capacity=time_slot_capacity,status=time_slot_time_slot_status,price=time_slot_price)        
+
+    juan = create_user(test_session,name="Juan",email="juan@example.com",password_hash="ejemplo",phone_number="12345",role=User_role.USER, profile_pic=None, bio=None)
+    maria = create_user(test_session,name="Juan",email="juan@example.com",password_hash="ejemplo",phone_number="12345",role=User_role.USER, profile_pic=None, bio=None)
+            
+    booking_1 = create_booking(test_session,time_slot_id=time_slot_1.time_slot_id,user_id=juan.user_id)
+    booking_2 = create_booking(test_session,time_slot_id=time_slot_2.time_slot_id,user_id=maria.user_id)
+        
+    with pytest.raises(
+        ValueError,
+        match="El horario seleccionado no está disponible."
+        ):
+            
+        (update_booking(
+            test_session,
+            booking_id=booking_2.booking_id,
+            time_slot_id=time_slot_1.time_slot_id
+    
+            ))
+            
+        test_session.refresh(booking_2)
+        
+        assert booking_2.time_slot_id == time_slot_2.time_slot_id
+    
+def test_delete_fake_booking(test_session):
+    
+    with pytest.raises(
+        ValueError,
+        match="La reserva seleccionada no existe."
+        ):
+                
+        delete_booking(test_session, booking_id=3000,actor_user_id=1)
+    
+
+def test_create_booking_fake_user(test_session):
+    
+    with pytest.raises(
+            ValueError,
+            match="El usuario seleccionado no existe."
+            ):create_booking(test_session,1,3000)
+    
+def test_start_time_before_end_time(test_session):
+    
+    start_at = datetime(2026, 9, 1, 11, 0)
+    end_at = datetime(2026, 9, 1, 10, 0)
+    capacity = 3
+    time_slot_status = Time_slot_status.AVAILABLE
+    price = Decimal("19.65")
+                    
+    with pytest.raises(
+        ValueError,
+        match="La hora de inicio debe comenzar antes de la hora final."
+        ):
+        create_time_slot(test_session,1,start_at=start_at,end_at=end_at,capacity=capacity,status=time_slot_status,price=price)
+    
+    start_at_2 = datetime(2026, 9, 1, 10, 0)
+    end_at_2 = datetime(2026, 9, 1, 11, 0)
+    capacity = 3
+    time_slot_status = Time_slot_status.AVAILABLE
+    price = Decimal("19.65")
+    
+    time_slot_result =create_time_slot(test_session,100,start_at=start_at_2,end_at=end_at_2,capacity=capacity,status=time_slot_status,price=price)
+    
+    with pytest.raises(
+            ValueError,
+            match="La hora de inicio debe comenzar antes de la hora final."
+            ):
+            update_time_slot(test_session,time_slot_id=time_slot_result.time_slot_id,start_at=datetime(2026, 9, 1, 12, 0))
+    
+

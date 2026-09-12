@@ -16,6 +16,13 @@ def create_time_slot(db: Session,
     
     time_slot = Time_slot(prof_user_id=prof_user_id, start_at=start_at, end_at=end_at, capacity=capacity, status=status, price=price)
     
+    if time_slot.price < 0:
+        raise ValueError("El precio no puede ser inferior a cero.")
+    if time_slot.capacity < 0:
+        raise ValueError("La capacidad no puede ser negativa.")
+    if time_slot.start_at >= time_slot.end_at:
+        raise ValueError("La hora de inicio debe comenzar antes de la hora final.")
+    
     db.add(time_slot)
     db.commit()
     db.refresh(time_slot)
@@ -38,13 +45,16 @@ def update_time_slot(db: Session,
     time_slot = db.get(Time_slot, time_slot_id)
         
     if time_slot is None:
-        return None
+        raise ValueError("El horario seleccionado no existe.")
     
     if start_at is not None:
         time_slot.start_at = start_at
         
     if end_at is not None:
         time_slot.end_at = end_at
+        
+    if time_slot.start_at >= time_slot.end_at:
+            raise ValueError("La hora de inicio debe comenzar antes de la hora final.")
     
     if capacity is not None:
         existing_bookings = db.exec(
@@ -62,8 +72,10 @@ def update_time_slot(db: Session,
             time_slot.status = Time_slot_status.AVAILABLE
         else:
             raise ValueError
-            
     elif status is not None:
+
+        if status == Time_slot_status.AVAILABLE:
+            raise ValueError("No se puede cambiar manualmente el status.")
         time_slot.status = status
     
     if price is not None and price != time_slot.price:
@@ -106,7 +118,7 @@ def delete_time_slot(db: Session,
     time_slot = db.get(Time_slot, time_slot_id)
     
     if time_slot is None:
-        return None
+        raise ValueError("El horario seleccionado no existe.")
     
     existing_booking = db.exec(
         select(Booking).where(
@@ -136,17 +148,17 @@ def create_booking(db: Session,
     time_slot = db.get(Time_slot, time_slot_id)
     
     if time_slot is None:
-        return None
+        raise ValueError("El horario seleccionado no existe.")
     
     user = db.get(User, user_id)
     
     if user is None:
-        return None
+        raise ValueError("El usuario seleccionado no existe.")
 
     professional = db.get(User, time_slot.prof_user_id)
     
     if professional is None:
-        return None
+        raise ValueError("El usuario seleccionado no existe.")
     
     if time_slot.status != Time_slot_status.AVAILABLE:
         raise ValueError("Este horario no está disponible.")
@@ -221,7 +233,7 @@ def update_booking(db: Session,
     booking = db.get(Booking, booking_id)
         
     if booking is None:
-        return None
+        raise ValueError("La reserva seleccionada no existe.")
     
     old_time_slot = db.get(Time_slot, booking.time_slot_id)
     
@@ -231,10 +243,10 @@ def update_booking(db: Session,
     new_time_slot = db.get(Time_slot, time_slot_id)
 
     if new_time_slot is None:
-        return None
+        raise ValueError("ID del slot inexistente.")
     
     if new_time_slot.status != Time_slot_status.AVAILABLE:
-        return None
+        raise ValueError("El horario seleccionado no está disponible.")
 
     existing_booking = db.exec(
         select(Booking).where(
@@ -284,7 +296,7 @@ def delete_booking(db: Session,
     booking = db.get(Booking, booking_id)
     
     if booking is None:
-        return None
+        raise ValueError("La reserva seleccionada no existe.")
     
     time_slot = db.get(
         Time_slot,
@@ -294,6 +306,9 @@ def delete_booking(db: Session,
     if time_slot is not None:
         time_slot.status = Time_slot_status.AVAILABLE
         db.add(time_slot)
+    
+    if actor_user_id is None:
+            raise ValueError("El usuario seleccionado no existe.")
         
     register_metadata_in_audit_log(db=db,
                                    booking_id=booking_id,
