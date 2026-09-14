@@ -5,7 +5,8 @@ from datetime import datetime
 from admin.auditlog import register_metadata_in_audit_log
 from pwdlib import PasswordHash
 from typing import Annotated
-from users.security import UserDB, get_current_active_user
+from users.security import UserDB, get_current_active_user, create_email_verification_token
+from users.email import send_message_by_email
 
 def create_user(db:Session,
                 name: str,
@@ -17,9 +18,27 @@ def create_user(db:Session,
                 bio: str | None,
                 ):
     user = User(name=name, email=email, password_hash=password_hash, phone_number=phone_number, role=role, profile_pic=profile_pic, bio=bio, created_at=datetime.now(), updated_at=datetime.now(), is_active=True, last_login_at=datetime.now())
+    
+    existing_user = db.exec(
+        select(User).where(User.email == email)
+    ).first()
+
+    if existing_user is not None:
+        raise ValueError("El email ya existe.")
+    
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    token = create_email_verification_token(user.email)
+    
+    send_message_by_email(
+        user.email,
+        "Confirma tu email",
+        f"Pulsa aquí para verificar tu cuenta: "
+        f"http://localhost:8000/usuarios/verificar-email?token={token}"
+    )
+
     
     register_metadata_in_audit_log(db=db,
                                    booking_id=None,
@@ -37,6 +56,9 @@ def read_user_by_id(db: Session,
     
     user = db.get(User, user_id)
     
+    if user is None:
+        raise ValueError("El usuario no existe.")
+    
     return user
 
 def update_user_profile_by_id(db: Session,
@@ -50,13 +72,22 @@ def update_user_profile_by_id(db: Session,
     user = db.get(User, user_id)
         
     if user is None:
-            return None
+            raise ValueError("El usuario no existe.")
             
     if name is not None:
         user.name = name
 
-    if email is not None:
+    if email is not None and email != user.email:
+    
+        existing_user = db.exec(
+                    select(User).where(User.email == email)
+                ).first()
+            
+        if existing_user is not None:
+            raise ValueError("El email ya existe.")
+        
         user.email = email
+        user.email_verified = False
 
     if phone_number is not None:
         user.phone_number = phone_number
@@ -90,13 +121,13 @@ def change_user_password(db:Session,
     user = db.get(User, user_id) 
     
     if user is None:
-        return None
+        raise ValueError("El usuario no existe.")
     
     if not password_hash.verify(current_password, user.password_hash):
         raise ValueError("La contraseña actual no es correcta")
     
     if current_password == new_password:
-        raise ValueError("La nueva contraseña debe ser diferente")
+        raise ValueError("La nueva contraseña debe ser diferente a la anterior.")
     
     # 3. Generar el nuevo hash para guardarlo
     new_password_hash = password_hash.hash(new_password)
@@ -123,7 +154,7 @@ def change_user_role(db: Session,
     user = db.get(User, user_id) 
         
     if user is None:
-        return None
+        raise ValueError("El usuario no existe.")
     
     old_role = user.role
 
@@ -148,7 +179,7 @@ def delete_user_by_id(db: Session,
     user = db.get(User, user_id)
         
     if user is None:
-        return None
+        raise ValueError("El usuario no existe.")
     
     #Registrar metadata antes de eliminar el registro
     register_metadata_in_audit_log(db=db,
@@ -166,7 +197,7 @@ def deactivate_user_by_id(db: Session,
     user = db.get(User, user_id)
         
     if user is None:
-        return None
+        raise ValueError("El usuario no es válido.")
         
     user.is_active = False
     user.updated_at = datetime.now()
@@ -186,7 +217,7 @@ def activate_user_by_id(db: Session,
     user = db.get(User, user_id)
         
     if user is None:
-        return None
+        raise ValueError("El usuario no es válido.")
         
     user.is_active = True
     user.updated_at = datetime.now()

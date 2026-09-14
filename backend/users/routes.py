@@ -1,9 +1,9 @@
 from typing import Annotated
 from db.models import User as UserDB
-from security import get_current_active_user, authenticate_user, create_access_token, get_password_hash
+from security import get_current_active_user, authenticate_user, create_access_token, get_password_hash, create_email_verification_token, verify_email_token
 from schemas import UserResponse, Token, UserCreate, UserUpdate, ChangePassword, MessageResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel import Session
+from sqlmodel import Session, select
 from fastapi import Depends, APIRouter, HTTPException, status
 from db.db import get_session
 from users import create_user, update_user_profile_by_id, change_user_password
@@ -95,3 +95,30 @@ async def change_user_password_route(db: Annotated[Session, Depends(get_session)
     result = change_user_password(db=db, user_id=current_user.user_id, current_password=user_data.current_password, new_password=user_data.new_password)
     
     return result
+
+@router.get("/verificar-email")
+async def verify_token_route(token: str,
+    db: Annotated[Session, Depends(get_session)]
+) -> MessageResponse:
+    
+    email = verify_email_token(token)  
+      
+    user = db.exec(
+        select(UserDB).where(UserDB.email == email)
+    ).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="El usuario no existe."
+        )
+
+    user.email_verified = True
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return MessageResponse(
+        message="Email verificado correctamente."
+    )

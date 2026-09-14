@@ -1,7 +1,8 @@
-from sqlmodel import create_engine, Session, select
+from sqlmodel import create_engine, Session, delete
 import os
 import pytest
 from dotenv import load_dotenv
+from db.models import User, Time_slot, Booking, Audit_log
 
 load_dotenv()
 
@@ -16,3 +17,9 @@ engine = create_engine(DATABASE_TEST_URL)
 def test_session():
     with Session(engine) as session:
         yield session
+        
+        session.exec(delete(Audit_log))
+        session.exec(delete(Booking))
+        session.exec(delete(Time_slot))
+        session.exec(delete(User))
+        session.commit()

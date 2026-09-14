@@ -21,6 +21,7 @@ class User(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = Field(default=True)
+    email_verified: bool = Field(default=False)
     last_login_at: datetime | None = None
 
 class Time_slot_status(str, Enum):

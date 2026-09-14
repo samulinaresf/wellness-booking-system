@@ -1,5 +1,5 @@
 from db.models import User_role
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 class Token(BaseModel):
     access_token: str
@@ -11,13 +11,13 @@ class TokenData(BaseModel):
     
 class UserResponse(BaseModel):
     name: str
-    email: str
+    email: EmailStr
     role: User_role
     is_active: bool
     
 class UserCreate(BaseModel):
     name: str
-    email: str
+    email: EmailStr
     password: str
     phone_number: str | None = None
     profile_pic: str | None = None
@@ -25,7 +25,7 @@ class UserCreate(BaseModel):
     
 class UserUpdate(BaseModel):
     name: str | None = None
-    email: str | None = None
+    email: EmailStr | None = None
     password: str | None = None
     phone_number: str | None = None
     profile_pic: str | None = None

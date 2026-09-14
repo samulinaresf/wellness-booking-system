@@ -59,7 +59,8 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire,
+                      "purpose": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -73,6 +74,10 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)],
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        if payload.get("purpose") != "access":
+            raise credentials_exception
+        
         email = payload.get("sub")
         if email is None:
             raise credentials_exception
@@ -92,3 +97,38 @@ async def get_current_active_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     return current_user
 
+def create_email_verification_token(email: str):
+    expire = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    payload = {
+        "sub": email,
+        "purpose": "email_verification",
+        "exp": expire
+    }
+
+    return jwt.encode(
+        payload,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
+
+def verify_email_token(token: str):
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        if payload.get("purpose") != "email_verification":
+            raise ValueError("Token de verificación inválido.")
+
+        email = payload.get("sub")
+
+        if email is None:
+            raise ValueError("Token de verificación inválido.")
+
+        return email
+
+    except InvalidTokenError:
+        raise ValueError("Token inválido o caducado.")
