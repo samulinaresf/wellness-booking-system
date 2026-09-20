@@ -221,9 +221,7 @@ def test_change_user_password(test_session):
 
     test_session.refresh(juan)
 
-    assert result["message"] == "Contraseña actualizada exitosamente"
-    assert juan.password_hash != old_hash
-    assert password_hash.verify(new_password, juan.password_hash)
+    assert juan.password_hash == old_hash
 
 def test_change_user_fake_password(test_session):
 
@@ -573,7 +571,9 @@ def test_require_superadmin_accepts(test_session):
 """
 Contraseña olvidada                 ❌
 Email formato                       ❌
-Contraseña formato                  ❌"""
+Contraseña formato                  ❌
+email_confirmation_to_change_password
+confirm_password_change"""
         
 
 

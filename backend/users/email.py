@@ -1,3 +1,5 @@
+#email.py
+
 from smtplib import SMTP, SMTPException
 from db.db import Session
 from db.models import User

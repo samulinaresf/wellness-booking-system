@@ -1,3 +1,5 @@
+#routes.py
+
 from typing import Annotated
 from db.models import User as UserDB
 from security import get_current_active_user, authenticate_user, create_access_token, get_password_hash, create_email_verification_token, verify_email_token
@@ -6,7 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 from fastapi import Depends, APIRouter, HTTPException, status
 from db.db import get_session
-from users import create_user, update_user_profile_by_id, change_user_password
+from users import create_user, update_user_profile_by_id, change_user_password, confirm_password_change
 
 router = APIRouter(
     prefix="/usuarios",
@@ -101,8 +103,14 @@ async def verify_token_route(token: str,
     db: Annotated[Session, Depends(get_session)]
 ) -> MessageResponse:
     
-    email = verify_email_token(token)  
-      
+    try:
+        email = verify_email_token(token)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )      
+        
     user = db.exec(
         select(UserDB).where(UserDB.email == email)
     ).first()
@@ -122,3 +130,12 @@ async def verify_token_route(token: str,
     return MessageResponse(
         message="Email verificado correctamente."
     )
+
+@router.get("/confirmar-cambio-contrasena", response_model=MessageResponse)
+async def confirm_password_change_route(token: str,
+    db: Annotated[Session, Depends(get_session)]
+) -> MessageResponse:
+    
+    return confirm_password_change(db,token)
+
+

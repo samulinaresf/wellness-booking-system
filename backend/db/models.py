@@ -49,4 +49,10 @@ class Audit_log(SQLModel, table=True):
     user_id: int | None = Field(default=None, foreign_key="user.user_id", ondelete="SET NULL")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     metadata_details: str | None = None
-    
+
+class PasswordChangeRequest(SQLModel, table=True):
+    password_change_id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.user_id")
+    new_password_hash: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime

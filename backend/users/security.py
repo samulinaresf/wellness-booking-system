@@ -1,3 +1,5 @@
+#security.py
+
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 import jwt
@@ -98,7 +100,7 @@ async def get_current_active_user(
     return current_user
 
 def create_email_verification_token(email: str):
-    expire = datetime.now(timezone.utc) + timedelta(hours=24)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=30)
 
     payload = {
         "sub": email,
@@ -132,3 +134,57 @@ def verify_email_token(token: str):
 
     except InvalidTokenError:
         raise ValueError("Token inválido o caducado.")
+
+def create_password_change_token(email: str,
+                                 password_change_id: int):
+    expire = datetime.now(timezone.utc) + timedelta(minutes=30)
+    
+    payload = {
+            "sub": email,
+            "password_change_id": password_change_id,
+            "purpose": "password_change",
+            "exp": expire
+        }
+    
+    return jwt.encode(
+            payload,
+            SECRET_KEY,
+            algorithm=ALGORITHM
+        )
+
+def verify_password_change_token(token: str):
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        if payload.get("purpose") != "password_change":
+            raise ValueError("Token de cambio de contraseña inválido.")
+
+        email = payload.get("sub")
+        password_change_id = payload.get("password_change_id")
+
+        if email is None or password_change_id is None:
+            raise ValueError("Token de cambio de contraseña inválido.")
+
+        return email, password_change_id
+
+    except InvalidTokenError:
+        raise ValueError("Token inválido o caducado.")
+
+async def get_current_verified_user(
+    current_user: Annotated[
+        UserDB,
+        Depends(get_current_active_user)
+    ],
+):
+    if not current_user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debes verificar tu email."
+        )
+
+    return current_user
+

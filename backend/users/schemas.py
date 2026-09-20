@@ -1,3 +1,5 @@
+#schemas.py
+
 from db.models import User_role
 from pydantic import BaseModel, EmailStr
 
@@ -14,6 +16,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: User_role
     is_active: bool
+    email_verified: bool
     
 class UserCreate(BaseModel):
     name: str

@@ -1,12 +1,15 @@
-from db.models import User, User_role
+#users.py
+
+from db.models import User, User_role, PasswordChangeRequest
 from sqlmodel import Session, select
 from fastapi import Depends, HTTPException, status
 from datetime import datetime
 from admin.auditlog import register_metadata_in_audit_log
 from pwdlib import PasswordHash
 from typing import Annotated
-from users.security import UserDB, get_current_active_user, create_email_verification_token
+from users.security import UserDB, get_current_active_user, create_email_verification_token, verify_email_token, verify_password_change_token, create_password_change_token
 from users.email import send_message_by_email
+from datetime import datetime, timedelta
 
 def create_user(db:Session,
                 name: str,
@@ -77,6 +80,8 @@ def update_user_profile_by_id(db: Session,
     if name is not None:
         user.name = name
 
+    email_changed = False
+
     if email is not None and email != user.email:
     
         existing_user = db.exec(
@@ -86,8 +91,10 @@ def update_user_profile_by_id(db: Session,
         if existing_user is not None:
             raise ValueError("El email ya existe.")
         
+        
         user.email = email
         user.email_verified = False
+        email_changed = True
 
     if phone_number is not None:
         user.phone_number = phone_number
@@ -104,6 +111,16 @@ def update_user_profile_by_id(db: Session,
     db.commit()
     db.refresh(user)
     
+    if email_changed:
+        token = create_email_verification_token(user.email)
+
+        send_message_by_email(
+            user.email,
+            "Confirma tu nuevo email",
+            f"Pulsa aquí para verificar tu cuenta: "
+            f"http://localhost:8000/usuarios/verificar-email?token={token}"
+        )
+    
     register_metadata_in_audit_log(db=db,
                                     booking_id=None,
                                     user_id=user.user_id,
@@ -113,39 +130,93 @@ def update_user_profile_by_id(db: Session,
 
 password_hash = PasswordHash.recommended()
 
+def email_confirmation_to_change_password(
+    email: str,
+    password_change_id: int
+):
+    if password_change_id is None:
+        raise ValueError("El id no es válido.")
+    token = create_password_change_token(
+        email,
+        password_change_id
+    )
+    
+    send_message_by_email(
+        email,
+        "Confirma tu cambio de contraseña",
+        f"Pulsa aquí para confirmar el cambio: "
+        f"http://localhost:8000/usuarios/confirmar-cambio-contrasena?token={token}"
+    )
+
 def change_user_password(db:Session,
                          user_id: int,
                          current_password: str,
                          new_password: str):
     
     user = db.get(User, user_id) 
+        
+    if user is None:
+        raise ValueError("El usuario no existe.")
+        
+    if not password_hash.verify(current_password, user.password_hash):
+        raise ValueError("La contraseña actual no es correcta")
+
+    if current_password == new_password:
+                    raise ValueError("La nueva contraseña debe ser diferente a la anterior.")
+    
+    new_password_hash = password_hash.hash(new_password)
+
+    temporal_password = PasswordChangeRequest(user_id=user.user_id,
+                                              expires_at=datetime.now() + timedelta(minutes=30))
+    
+    temporal_password.new_password_hash = new_password_hash
+    
+    db.add(temporal_password)
+    db.commit()
+    db.refresh(temporal_password)
+    
+    email_confirmation_to_change_password(
+        user.email,
+        temporal_password.password_change_id
+    )        
+    
+    return {"message": "Revisa tu correo para confirmar el cambio"}
+
+def confirm_password_change(db: Session, 
+                            token: str):
+    
+    email, password_change_id = verify_password_change_token(token)
+    
+    temporal_password = db.get(PasswordChangeRequest,password_change_id)
+    
+    if temporal_password is None:
+        raise ValueError("La solicitud de cambio de contraseña no existe.")
+    
+    user = db.get(
+        User,
+        temporal_password.user_id
+    )
     
     if user is None:
         raise ValueError("El usuario no existe.")
     
-    if not password_hash.verify(current_password, user.password_hash):
-        raise ValueError("La contraseña actual no es correcta")
+    if temporal_password.expires_at < datetime.now():
+        raise ValueError("La solicitud ha expirado.")
     
-    if current_password == new_password:
-        raise ValueError("La nueva contraseña debe ser diferente a la anterior.")
-    
-    # 3. Generar el nuevo hash para guardarlo
-    new_password_hash = password_hash.hash(new_password)
-    
-    user.password_hash = new_password_hash
-    
+    user.password_hash = temporal_password.new_password_hash
     user.updated_at = datetime.now()
-
+    
     db.add(user)
+    db.delete(temporal_password)
     db.commit()
     db.refresh(user)
-        
+    
     register_metadata_in_audit_log(db=db,
-                                    booking_id=None,
-                                    user_id=user.user_id,
-                                    metadata_details=f"Contraseña del usuario {user.user_id} ({user.email}) actualizada.")
-        
-    return {"message": "Contraseña actualizada exitosamente"}
+                                   booking_id=None,
+                                   user_id=user.user_id,
+                                   metadata_details= f"{user.name} ha cambiado su contraseña exitosamente")
+    
+    return {"message": "Contraseña cambiada con éxito."}
 
 def change_user_role(db: Session, 
                     user_id: int,
