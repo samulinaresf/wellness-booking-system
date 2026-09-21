@@ -23,24 +23,15 @@ def create_user(db:Session,
     user = User(name=name, email=email, password_hash=password_hash, phone_number=phone_number, role=role, profile_pic=profile_pic, bio=bio, created_at=datetime.now(), updated_at=datetime.now(), is_active=True, last_login_at=datetime.now())
     
     existing_user = db.exec(
-        select(User).where(User.email == email)
-    ).first()
-
+                        select(User).where(User.email == email)
+                    ).first()
+                
     if existing_user is not None:
         raise ValueError("El email ya existe.")
     
     db.add(user)
     db.commit()
     db.refresh(user)
-    
-    token = create_email_verification_token(user.email)
-    
-    send_message_by_email(
-        user.email,
-        "Confirma tu email",
-        f"Pulsa aquí para verificar tu cuenta: "
-        f"http://localhost:8000/usuarios/verificar-email?token={token}"
-    )
 
     
     register_metadata_in_audit_log(db=db,
@@ -49,6 +40,25 @@ def create_user(db:Session,
                                    metadata_details=f"Usuario {user.user_id} ({user.email}) creado")
     
     return user
+
+def send_email_for_new_user(db: Session,
+                            email: str):
+    
+    user = db.exec(
+            select(User).where(User.email == email)
+        ).first()
+    
+    if user is None:
+        raise ValueError("El email no existe.")
+    
+    token = create_email_verification_token(user.email)
+        
+    send_message_by_email(
+        user.email,
+        "Confirma tu email",
+        f"Pulsa aquí para verificar tu cuenta: "
+        f"http://localhost:8000/usuarios/verificar-email?token={token}"
+    )
 
 def read_users(db: Session):
     user = db.exec(select(User)).all()
@@ -90,7 +100,6 @@ def update_user_profile_by_id(db: Session,
             
         if existing_user is not None:
             raise ValueError("El email ya existe.")
-        
         
         user.email = email
         user.email_verified = False

@@ -2,7 +2,7 @@ from sqlmodel import create_engine, Session, delete
 import os
 import pytest
 from dotenv import load_dotenv
-from db.models import User, Time_slot, Booking, Audit_log
+from db.models import User, Time_slot, Booking, Audit_log, PasswordChangeRequest
 
 load_dotenv()
 
@@ -16,10 +16,14 @@ engine = create_engine(DATABASE_TEST_URL)
 @pytest.fixture
 def test_session():
     with Session(engine) as session:
-        yield session
-        
-        session.exec(delete(Audit_log))
-        session.exec(delete(Booking))
-        session.exec(delete(Time_slot))
-        session.exec(delete(User))
-        session.commit()
+        try:
+            yield session
+            
+        finally:
+            session.rollback()
+            session.exec(delete(Audit_log))
+            session.exec(delete(Booking))
+            session.exec(delete(Time_slot))
+            session.exec(delete(PasswordChangeRequest))
+            session.exec(delete(User))
+            session.commit()

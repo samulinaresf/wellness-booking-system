@@ -1,16 +1,17 @@
-from users.users import create_user, read_users, read_user_by_id, update_user_profile_by_id, change_user_password, password_hash, change_user_role, delete_user_by_id, deactivate_user_by_id, require_superadmin, activate_user_by_id, require_admin
+from users.users import create_user, read_users, read_user_by_id, update_user_profile_by_id, change_user_password, password_hash, change_user_role, delete_user_by_id, deactivate_user_by_id, require_superadmin, activate_user_by_id, require_admin, send_email_for_new_user, confirm_password_change, email_confirmation_to_change_password
 from conftest import test_session
-from datetime import datetime
-from db.models import Time_slot_status, User_role, User
+from datetime import datetime, timedelta
+from db.models import Time_slot_status, User_role, User, PasswordChangeRequest
 from decimal import Decimal, InvalidOperation
-from users.security import UserDB, get_current_active_user
+from users.security import create_password_change_token
 import pytest
 from fastapi import HTTPException
+from unittest.mock import patch
 
 def test_create_user(test_session):
     
     name = "Juan"
-    email = "juan@example.com"
+    email = "juan5@example.com"
     password_hash = "12345"
     phone_number = "12345"
     role = User_role.USER
@@ -37,14 +38,13 @@ def test_create_user_existing_email(test_session):
     profile_pic = None, 
     bio = None
     
-    
     juan = create_user(test_session,name=name, email=email, password_hash=password_hash, phone_number=phone_number, role=role, profile_pic=profile_pic, bio=bio)
     
     assert juan is not None
     
     with pytest.raises(ValueError,
                        match="El email ya existe."):
-        create_user(test_session,name=name, email=email, password_hash=password_hash, phone_number=phone_number, role=role, profile_pic=profile_pic, bio=bio)
+        create_user(test_session,name=name, email=juan.email, password_hash=password_hash, phone_number=phone_number, role=role, profile_pic=profile_pic, bio=bio)
 
 
 def test_read_users(test_session):
@@ -186,7 +186,6 @@ def test_update_user_existing_email(test_session):
         update_user_profile_by_id(test_session, name=juan_alberto_name, email="juan@example.com", phone_number=juan_alberto_phone_number,profile_pic=juan_alberto_profile_pic,user_id=juan_alberto.user_id,bio=juan_alberto_bio)
 
 def test_update_fake_user(test_session):
-    
     
     with pytest.raises(ValueError,
                        match="El usuario no existe."):
@@ -566,14 +565,77 @@ def test_require_superadmin_accepts(test_session):
 
     assert result.role == User_role.SUPERADMIN
 
+def test_send_email_for_new_user(test_session):
+    
+    juan = create_user(test_session,name="Juan", email="juan6@example.com", password_hash="12345", phone_number="123456", role=User_role.USER, profile_pic=None, bio=None)
 
+    with patch("users.users.send_message_by_email") as mock_send_email:
 
-"""
-Contraseña olvidada                 ❌
-Email formato                       ❌
-Contraseña formato                  ❌
-email_confirmation_to_change_password
-confirm_password_change"""
+        result = send_email_for_new_user(
+            db=test_session,
+            email=juan.email
+        )
+
+        mock_send_email.assert_called_once()
+    
+        args = mock_send_email.call_args.args
+
+        assert args[0] == juan.email
+        assert args[1] == "Confirma tu email"
+        assert "token=" in args[2]
+
+def test_confirm_password_change(test_session):
+    
+    old_password = "12345"
+    new_password = "123456"
+    
+    juan = create_user(test_session,name="Juan", email="juan6@example.com", password_hash=password_hash.hash(old_password), phone_number="123456", role=User_role.USER, profile_pic=None, bio=None)
+
+    password_request = PasswordChangeRequest(user_id=juan.user_id, new_password_hash=password_hash.hash(new_password), expires_at=datetime.now() + timedelta(minutes=30))
+    
+    test_session.add(password_request)
+    test_session.commit()
+    test_session.refresh(password_request)
+    
+    token = create_password_change_token(email=juan.email, password_change_id=password_request.password_change_id)
+    
+    result = confirm_password_change(db=test_session,token=token)
+    
+    
+    
+    assert password_hash.verify(
+        new_password,
+        juan.password_hash
+    )
+
+    assert test_session.get(
+        PasswordChangeRequest,
+        password_request.password_change_id
+    ) is None
+    
+
+def test_email_confirmation_to_change_password():
+    
+    email = "juan@example.com"
+    password_change_id = 1
+
+    with patch("users.users.send_message_by_email") as mock_send_email:
+
+        email_confirmation_to_change_password(
+            email=email,
+            password_change_id=password_change_id
+        )
+
+        mock_send_email.assert_called_once()
+
+        args = mock_send_email.call_args.args
+
+        assert args[0] == email
+        assert args[1] == "Confirma tu cambio de contraseña"
+        assert "token=" in args[2]
+    
+
+    
         
 
 
