@@ -1,8 +1,7 @@
 from users.users import create_user, read_users, read_user_by_id, update_user_profile_by_id, change_user_password, password_hash, change_user_role, delete_user_by_id, deactivate_user_by_id, require_superadmin, activate_user_by_id, require_admin, send_email_for_new_user, confirm_password_change, email_confirmation_to_change_password
 from conftest import test_session
 from datetime import datetime, timedelta
-from db.models import Time_slot_status, User_role, User, PasswordChangeRequest
-from decimal import Decimal, InvalidOperation
+from db.models import User_role, User, PasswordChangeRequest
 from users.security import create_password_change_token
 import pytest
 from fastapi import HTTPException

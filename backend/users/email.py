@@ -1,8 +1,6 @@
 #email.py
 
-from smtplib import SMTP, SMTPException
-from db.db import Session
-from db.models import User
+from smtplib import SMTPException
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -33,7 +31,7 @@ def send_message_by_email(
             servidor.login(SMTP_EMAIL, SMTP_PASSWORD)
             servidor.sendmail(SMTP_EMAIL, user_email, msg.as_string())
             print("Correo enviado con éxito")
-    except Exception as e:
+    except SMTPException as e:
         print(f"Error al enviar el correo: {e}")
-
+        raise
         

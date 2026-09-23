@@ -33,10 +33,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/usuarios/token")
 def verify_password(plain_password, hashed_password):
     return password_hash.verify(plain_password, hashed_password)
 
-
 def get_password_hash(password):
     return password_hash.hash(password)
-
 
 def get_user(db: Session, 
              email: str):
@@ -65,7 +63,6 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
                       "purpose": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
-
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)],
                            db: Annotated[Session, Depends(get_session)]):
@@ -96,7 +93,7 @@ async def get_current_active_user(
     current_user: Annotated[UserDB, Depends(get_current_user)],
 ):
     if not current_user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuario inactivo")
     return current_user
 
 def create_email_verification_token(email: str):
